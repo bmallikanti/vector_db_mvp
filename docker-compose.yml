@@ -1,41 +1,70 @@
 services:
-  # Temporal server
-  temporal:
-    image: temporalio/auto-setup:latest
-    ports:
-      - "7233:7233"  # gRPC endpoint
-      - "8080:8080"  # Web UI
-    environment:
-      - DB=postgres12
-      - DB_PORT=5432
-      - POSTGRES_USER=temporal
-      - POSTGRES_PWD=temporal
-      - POSTGRES_SEEDS=postgresql
-    depends_on:
-      - postgresql
-
-  # PostgreSQL for Temporal
-  postgresql:
+  postgres:
     image: postgres:13
     environment:
-      POSTGRES_PASSWORD: temporal
       POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
     ports:
       - "5432:5432"
     volumes:
       - temporal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # Temporal Web UI
-  temporal-web:
-    image: temporalio/web:latest
-    ports:
-      - "8088:8088"
+  temporal:
+    image: temporalio/auto-setup:latest
     environment:
-      - TEMPORAL_GRPC_ENDPOINT=temporal:7233
-      - TEMPORAL_PERMIT_WRITE_API=true
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "7233:7233"
+
+  # ✅ New UI (v2)
+  ui:
+    image: temporalio/ui:latest
+    environment:
+      # The UI talks to the Temporal server via docker network hostname
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:8080
     depends_on:
       - temporal
+    ports:
+      - "8080:8080"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      COHERE_API_KEY: ${COHERE_API_KEY}
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      temporal:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      COHERE_API_KEY: ${COHERE_API_KEY}
+      TEMPORAL_ADDRESS: temporal:7233
+    depends_on:
+      temporal:
+        condition: service_started
+    command: ["python", "-m", "app.temporal_workflows.worker"]
 
 volumes:
   temporal-postgres-data:
-

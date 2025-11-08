@@ -115,15 +115,22 @@ class SearchService:
         else:
             raise ValueError("Provide either query_text or query_embedding")
 
-        # 4) Choose index and search
-        if index == "brute":
+        # 4) Choose index and search, with sensible fallback for LSH on tiny datasets
+        requested_index = index
+        index_used = requested_index
+        if requested_index == "brute":
             idx = BruteForceIndex(rows)
-        elif index == "lsh":
-            idx = LSHIndex(rows, num_tables=lsh_tables, num_planes=lsh_planes)
+            hits = idx.search(q, k)
+        elif requested_index == "lsh":
+            idx_lsh = LSHIndex(rows, num_tables=lsh_tables, num_planes=lsh_planes)
+            hits = idx_lsh.search(q, k)
+            # Fallback: if no candidates from LSH, do a brute-force pass to avoid empty results on small datasets
+            if not hits and len(rows) <= 10000:
+                idx_b = BruteForceIndex(rows)
+                hits = idx_b.search(q, k)
+                index_used = "brute"
         else:
             raise ValueError("index must be 'brute' or 'lsh'")
-
-        hits = idx.search(q, k)
 
         # 5) Pack results
         packed = []
@@ -141,4 +148,9 @@ class SearchService:
             )
 
         lib = self.libs.get(lib_id)
-        return {"hits": packed, "index": index, "library_version": (lib.version if lib else None)}
+        return {
+            "hits": packed,
+            "index": requested_index,
+            "index_used": index_used,
+            "library_version": (lib.version if lib else None),
+        }

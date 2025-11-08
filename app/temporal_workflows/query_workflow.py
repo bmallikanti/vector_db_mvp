@@ -65,16 +65,56 @@ async def setup_test_data_activity(lib_id: str) -> Dict[str, Any]:
     docs = DocumentService()
     chunks = ChunkService()
     
-    # Check if library exists
+    # Check if library exists and has chunks
     existing_lib = libs.get(lib_id)
     if existing_lib:
-        logger.info(f"✓ Library {lib_id} already exists")
-        return {
-            "created": False,
-            "lib_id": lib_id,
-            "message": "Library already exists",
-            "chunks_count": sum(len(d.chunks) for d in existing_lib.documents),
-        }
+        chunks_count = sum(len(d.chunks) for d in existing_lib.documents)
+        if chunks_count > 0:
+            logger.info(f"✓ Library {lib_id} already exists with {chunks_count} chunks")
+            return {
+                "created": False,
+                "lib_id": lib_id,
+                "message": "Library already exists with chunks",
+                "chunks_count": chunks_count,
+            }
+        else:
+            logger.info(f"✓ Library {lib_id} exists but has no chunks, creating chunks...")
+            # Use first document or create one
+            if existing_lib.documents:
+                doc = existing_lib.documents[0]
+            else:
+                doc = docs.add(str(existing_lib.id), Document(title="Test Doc"))
+                logger.info(f"✓ Created document: {doc.id}")
+            
+            # Generate embeddings using Cohere API
+            from app.adapters.embedding_providers.cohere_provider import CohereProvider
+            try:
+                embedder = CohereProvider()
+                embedding1 = embedder.embed_text("Paris is beautiful")
+                embedding2 = embedder.embed_text("Tokyo is amazing")
+                logger.info("✓ Generated embeddings using Cohere API")
+            except Exception as e:
+                logger.error(f"❌ Cohere API not available: {e}")
+                raise ValueError(
+                    "Cohere API key required. Please set COHERE_API_KEY in your .env file. "
+                    "The setup activity needs Cohere to generate embeddings."
+                )
+            
+            # Add chunks with embeddings
+            chunk1 = chunks.add(str(existing_lib.id), str(doc.id),
+                      Chunk(text="Paris is beautiful", embedding=embedding1,
+                           metadata={"type": "paragraph"}))
+            chunk2 = chunks.add(str(existing_lib.id), str(doc.id),
+                      Chunk(text="Tokyo is amazing", embedding=embedding2,
+                           metadata={"type": "paragraph"}))
+            
+            logger.info(f"✓ Created 2 chunks for existing library")
+            return {
+                "created": True,
+                "lib_id": str(existing_lib.id),
+                "message": "Added chunks to existing library",
+                "chunks_count": 2,
+            }
     
     # Create test library - handle both UUID and string IDs
     lib = Library(name="Temporal Demo")
@@ -96,12 +136,26 @@ async def setup_test_data_activity(lib_id: str) -> Dict[str, Any]:
     doc = docs.add(str(lib.id), Document(title="Test Doc"))
     logger.info(f"✓ Created document: {doc.id}")
     
-    # Add chunks with embeddings
+    # Generate embeddings using Cohere API
+    from app.adapters.embedding_providers.cohere_provider import CohereProvider
+    try:
+        embedder = CohereProvider()
+        embedding1 = embedder.embed_text("Paris is beautiful")
+        embedding2 = embedder.embed_text("Tokyo is amazing")
+        logger.info("✓ Generated embeddings using Cohere API")
+    except Exception as e:
+        logger.error(f"❌ Cohere API not available: {e}")
+        raise ValueError(
+            "Cohere API key required. Please set COHERE_API_KEY in your .env file. "
+            "The setup activity needs Cohere to generate embeddings."
+        )
+    
+    # Add chunks with embeddings (using Cohere)
     chunk1 = chunks.add(str(lib.id), str(doc.id),
-              Chunk(text="Paris is beautiful", embedding=[0.9, 0.1],
+              Chunk(text="Paris is beautiful", embedding=embedding1,
                    metadata={"type": "paragraph"}))
     chunk2 = chunks.add(str(lib.id), str(doc.id),
-              Chunk(text="Tokyo is amazing", embedding=[0.1, 0.9],
+              Chunk(text="Tokyo is amazing", embedding=embedding2,
                    metadata={"type": "paragraph"}))
     
     logger.info(f"✓ Created 2 chunks: '{chunk1.text}' and '{chunk2.text}'")

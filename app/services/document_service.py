@@ -22,3 +22,6 @@ class DocumentService:
 
     def delete(self, lib_id: str, doc_id: str) -> bool:
         return self.docs.delete(lib_id, doc_id)
+
+    def update(self, lib_id: str, doc_id: str, *, title: str | None, metadata: dict | None) -> Optional[Document]:
+        return self.docs.update(lib_id, doc_id, title=title, metadata=metadata)

@@ -60,3 +60,39 @@ class ChunkRepo:
                         lib.version += 1
                         return True
         return False
+
+    def update(
+        self,
+        lib_id: str,
+        doc_id: str,
+        chunk_id: str,
+        *,
+        text: str | None,
+        embedding: list[float] | None,
+        metadata: dict | None,
+    ) -> Optional[Chunk]:
+        """
+        Update chunk text, embedding, and/or metadata.type.
+        """
+        lock = self.libs.lib_lock(lib_id)
+        with lock.write_lock():
+            lib = LibraryRepo.instance()._libs.get(lib_id)
+            if not lib:
+                return None
+            for d in lib.documents:
+                if str(d.id) == doc_id:
+                    for c in d.chunks:
+                        if str(c.id) == chunk_id:
+                            if text is not None:
+                                c.text = text
+                            if embedding is not None:
+                                c.embedding = embedding
+                            if metadata:
+                                t = metadata.get("type")
+                                if t is not None:
+                                    c.metadata.type = t
+                            d.metadata.update_timestamp()
+                            lib.metadata.update_timestamp()
+                            lib.version += 1
+                            return deepcopy(c)
+        return None

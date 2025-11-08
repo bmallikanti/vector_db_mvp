@@ -61,3 +61,27 @@ class DocumentRepo:
                 lib.version += 1
                 return True
             return False
+
+    def update(self, lib_id: str, doc_id: str, *, title: str | None, metadata: dict | None) -> Optional[Document]:
+        """
+        Update document title and/or metadata (category).
+        """
+        lock = self.libs.lib_lock(lib_id)
+        with lock.write_lock():
+            lib = LibraryRepo.instance()._libs.get(lib_id)
+            if not lib:
+                return None
+            for d in lib.documents:
+                if str(d.id) == doc_id:
+                    if title is not None:
+                        d.title = title
+                    if metadata:
+                        # Only allow known fields
+                        cat = metadata.get("category")
+                        if cat is not None:
+                            d.metadata.category = cat
+                    d.metadata.update_timestamp()
+                    lib.metadata.update_timestamp()
+                    lib.version += 1
+                    return deepcopy(d)
+        return None

@@ -4,6 +4,7 @@ Temporal worker for executing workflows and activities.
 
 import asyncio
 import logging
+import os
 from temporalio.client import Client
 from temporalio.worker import Worker
 
@@ -14,6 +15,13 @@ from app.temporal_workflows.query_workflow import (
     generate_embedding_activity,
     search_vectors_activity,
     rerank_results_activity,
+)
+from app.temporal_workflows.interactive_workflow import (
+    InteractiveDBWorkflow,
+    interactive_create_library_activity,
+    interactive_create_document_activity,
+    interactive_create_chunk_activity,
+    interactive_search_activity,
 )
 
 # Configure logging
@@ -30,22 +38,27 @@ async def main():
     """
     Start the Temporal worker.
     """
-    logger.info("Connecting to Temporal server at localhost:7233...")
-    # Connect to Temporal server (default: localhost:7233)
-    client = await Client.connect("localhost:7233")
+    temporal_addr = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
+    logger.info(f"Connecting to Temporal server at {temporal_addr}...")
+    # Connect to Temporal server
+    client = await Client.connect(temporal_addr)
     logger.info("✓ Connected to Temporal server")
     
     # Create worker
     worker = Worker(
         client,
         task_queue=TASK_QUEUE,
-        workflows=[QueryWorkflow],
+        workflows=[QueryWorkflow, InteractiveDBWorkflow],
         activities=[
             setup_test_data_activity,
             validate_query_activity,
             generate_embedding_activity,
             search_vectors_activity,
             rerank_results_activity,
+            interactive_create_library_activity,
+            interactive_create_document_activity,
+            interactive_create_chunk_activity,
+            interactive_search_activity,
         ],
     )
     

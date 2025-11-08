@@ -4,6 +4,7 @@ Temporal client for starting workflows.
 
 from temporalio.client import Client
 from typing import Optional
+import os
 
 from app.temporal_workflows.query_workflow import QueryRequest, QueryResponse
 
@@ -16,8 +17,9 @@ class TemporalQueryClient:
     Client for executing queries via Temporal workflows.
     """
     
-    def __init__(self, temporal_url: str = "localhost:7233"):
-        self.temporal_url = temporal_url
+    def __init__(self, temporal_url: str | None = None):
+        # Allow env override when running in Docker: TEMPORAL_ADDRESS=temporal:7233
+        self.temporal_url = temporal_url or os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
         self._client: Optional[Client] = None
     
     async def connect(self):

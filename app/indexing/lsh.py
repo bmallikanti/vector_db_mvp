@@ -75,9 +75,9 @@ class LSHIndex(Index):
             return []
 
         q = _unit(query.astype(float, copy=False))
-        cand: set[int] = set()
 
-        # Collect candidates from all tables
+        # candidates from all tables that match the query hash keys
+        cand: set[int] = set() 
         for t in range(self.T):
             key = self._hash(q, self.planes[t])
             cand.update(self.tables[t].get(key, []))
@@ -88,8 +88,9 @@ class LSHIndex(Index):
         # Score candidates by cosine (dot on unit vectors)
         scored: List[Tuple[int, float]] = []
         for i in cand:
-            s = _dot(self._vecs[i], q)
-            scored.append((i, s))
+            score = _dot(self._vecs[i], q)
+            scored.append((i, score))
 
-        scored.sort(key=lambda x: x[1], reverse=True)
+        scored.sort(key=lambda x: x[1], reverse=True) # sort by score descending
         return scored[: min(k, len(scored))]
+        
