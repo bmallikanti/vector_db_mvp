@@ -19,7 +19,6 @@ RUN pip install --upgrade pip setuptools wheel && pip install .
 # Copy source
 COPY app /app/app
 COPY interactive_cli.py /app/interactive_cli.py
-COPY test_system.py /app/test_system.py
 
 # Default envs (can be overridden by docker-compose)
 ENV HOST=0.0.0.0 \

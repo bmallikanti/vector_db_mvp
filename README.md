@@ -2,6 +2,272 @@
 
 A minimal vector database with FastAPI and Temporal workflows.
 
+## Local Development (Step-by-Step)
+
+### Prerequisites
+
+- Python 3.11 or higher
+- Docker and Docker Compose (for Temporal server)
+- Cohere API key (optional, for auto-embeddings)
+
+### Step 1: Install Dependencies
+
+```bash
+# Create virtual environment (if not already created)
+python -m venv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+# On Windows:
+# venv\Scripts\activate
+
+# Install the package
+pip install -e .
+```
+
+### Step 2: Set Up Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+echo "COHERE_API_KEY=your_api_key_here" > .env
+echo "TEMPORAL_ADDRESS=localhost:7233" >> .env
+```
+
+Or manually create `.env`:
+```
+COHERE_API_KEY=your_api_key_here
+TEMPORAL_ADDRESS=localhost:7233
+```
+
+**Note:** 
+- The `.env` file is automatically loaded by `pydantic-settings` - no need to manually export variables
+- If you don't have a Cohere API key, you can still use the system by providing embeddings explicitly in API requests
+
+### Step 3: Start Temporal Server
+
+The Temporal server needs to be running for workflows to work. Start it using Docker Compose:
+
+```bash
+# Start only Temporal services (PostgreSQL, Temporal server, and UI)
+docker compose up -d postgres temporal ui
+```
+
+This starts:
+- **PostgreSQL** (port 5432) - Temporal's database
+- **Temporal Server** (port 7233) - Workflow orchestration
+- **Temporal UI** (port 8080) - Web UI for monitoring workflows
+
+Verify Temporal is running:
+```bash
+# Check services are up
+docker compose ps
+
+# Or check Temporal UI in browser
+open http://localhost:8080
+```
+
+### Step 4: Start the Worker (Terminal 1)
+
+The worker processes Temporal workflows and activities. **Keep this running** in a separate terminal:
+
+```bash
+# Make sure virtual environment is activated
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
+
+# Run the worker
+python -m app.temporal_workflows.worker
+```
+
+You should see:
+```
+INFO - Connecting to Temporal server at localhost:7233...
+INFO - ✓ Connected to Temporal server
+INFO - Starting worker on task queue: vector-db-query-queue
+INFO - Worker is ready to process workflows and activities...
+INFO - Waiting for tasks...
+```
+
+**Important:** Keep this terminal open. The worker must be running for Temporal workflows to execute.
+
+### Step 5: Start the API Server (Terminal 2)
+
+In a **new terminal**, start the FastAPI server:
+
+```bash
+# Navigate to project directory
+cd /path/to/DB_vector
+
+# Activate virtual environment
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
+
+# Start the API server
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+You should see:
+```
+INFO:     Uvicorn running on http://0.0.0.0:8000
+INFO:     Application startup complete.
+```
+
+The API is now available at:
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+- **Alternative Docs**: http://localhost:8000/redoc
+
+**Note:** The `--reload` flag enables auto-reload on code changes (useful for development).
+
+### Step 6: Test the Setup
+
+In a **third terminal** (or use your browser), test the API:
+
+```bash
+# Health check (if you have a health endpoint)
+curl http://localhost:8000/docs
+
+# Create a library
+curl -X POST http://localhost:8000/vector_db/libraries \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Test Library"}'
+```
+
+### Step 7: Run Interactive CLI (Optional)
+
+For the interactive CLI experience, you can run it in another terminal:
+
+```bash
+# Activate virtual environment
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
+
+# Run interactive CLI
+python interactive_cli.py
+```
+
+The CLI will:
+- Start a Temporal interactive workflow session
+- Guide you through adding libraries, documents, and chunks
+- Allow you to perform searches with auto-embeddings
+
+### Summary: Running All Components
+
+You need **3 terminals** running simultaneously:
+
+1. **Terminal 1 - Worker**: `python -m app.temporal_workflows.worker`
+2. **Terminal 2 - API**: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
+3. **Terminal 3 - CLI** (optional): `python interactive_cli.py`
+
+Plus Docker Compose running Temporal services in the background.
+
+### Troubleshooting
+
+**Worker can't connect to Temporal:**
+- Make sure Temporal server is running: `docker compose ps`
+- Check `TEMPORAL_ADDRESS` in `.env` matches your setup
+- Default should be `localhost:7233` for local development
+
+**API can't reach Temporal:**
+- Verify Temporal server is accessible at the address in `TEMPORAL_ADDRESS`
+- Check firewall/network settings
+
+**Workflows not executing:**
+- Ensure the worker is running and connected
+- Check Temporal UI (http://localhost:8080) for workflow status
+- Look for errors in worker terminal output
+
+## Testing
+
+### Running CRUD Tests
+
+The project includes comprehensive CRUD tests that are **independent of Temporal workflows**. These tests verify all create, read, update, and delete operations for libraries, documents, and chunks.
+
+**Important:** You do **NOT** need to run `main.py` (the API server) for these tests. The tests use FastAPI's `TestClient`, which tests the application directly without requiring a running server.
+
+### Prerequisites for Testing
+
+1. Install dependencies (including pytest):
+   ```bash
+   pip install -e .
+   ```
+
+2. Ensure your virtual environment is activated:
+   ```bash
+   source venv/bin/activate  # macOS/Linux
+   # venv\Scripts\activate   # Windows
+   ```
+
+### Running Tests
+
+Run all CRUD tests:
+```bash
+pytest tests/test_crud.py -v
+```
+
+Run all tests in the tests directory:
+```bash
+pytest tests/ -v
+```
+
+Run a specific test:
+```bash
+pytest tests/test_crud.py::TestLibrariesCRUD::test_create_library_minimal -v
+```
+
+Run tests with coverage:
+```bash
+pytest tests/ --cov=app --cov-report=html
+```
+
+### What the Tests Cover
+
+The CRUD test suite (`tests/test_crud.py`) includes **39 tests** covering:
+
+- **Libraries** (10 tests):
+  - Create (minimal & full data)
+  - List all libraries
+  - Get specific library
+  - Update library
+  - Delete library
+  - Error cases (404, 400)
+
+- **Documents** (13 tests):
+  - Create documents
+  - List documents in a library
+  - Get specific document
+  - Update document (title & metadata)
+  - Delete document
+  - Error cases (library/document not found, validation errors)
+
+- **Chunks** (15 tests):
+  - Create chunks (with/without embeddings)
+  - List chunks in a document
+  - Update chunk (text, embedding, metadata)
+  - Delete chunk
+  - Error cases (library/document not found, validation errors)
+
+- **Integration** (1 test):
+  - Full workflow: create library → document → chunks → update → delete
+
+### Test Isolation
+
+Each test is isolated using pytest fixtures:
+- Tests automatically create and clean up test data
+- No shared state between tests
+- No need to manually clean up after tests
+
+### Note on Temporal Tests
+
+The current test suite focuses on CRUD operations and does **not** require:
+- Temporal server to be running
+- Worker process to be running
+- API server (`main.py`) to be running
+
+For testing Temporal workflows, you would need Temporal infrastructure running, but the CRUD tests are designed to be independent and fast.
+
 ## Quick Start (Docker)
 
 ### 1) Set environment

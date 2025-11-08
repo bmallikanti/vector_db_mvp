@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
+import os
 from fastapi import APIRouter, HTTPException
 from fastapi import status as http
 
@@ -11,7 +12,9 @@ router = APIRouter()
 
 
 async def get_temporal_client() -> Client:
-    return await Client.connect("localhost:7233")
+    # Allow env override when running in Docker: TEMPORAL_ADDRESS=temporal:7233
+    temporal_url = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
+    return await Client.connect(temporal_url)
 
 
 @router.post("/start", status_code=http.HTTP_202_ACCEPTED)
@@ -22,16 +25,31 @@ async def start_interactive_workflow() -> Dict[str, Any]:
     """
     from uuid import uuid4
     try:
+        temporal_url = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
         client = await get_temporal_client()
         handle = await client.start_workflow(
             "InteractiveDBWorkflow",
             id=f"interactive-session-{uuid4()}",
             task_queue=TASK_QUEUE,
         )
-        info = await handle.describe()
-        return {"workflow_id": handle.id, "run_id": handle.result_run_id, "status": str(info.status)}
+        # Safely try to include run_id and status, but don't fail if unavailable
+        try:
+            info = await handle.describe()
+            run_id = getattr(info, "run_id", None)
+            if run_id is None:
+                exec_obj = getattr(info, "execution", None)
+                run_id = getattr(exec_obj, "run_id", None) if exec_obj else None
+            return {"workflow_id": handle.id, "run_id": run_id, "status": str(info.status)}
+        except Exception:
+            # Some SDK versions/servers may not support describe fields uniformly
+            return {"workflow_id": handle.id}
     except Exception as e:
-        raise HTTPException(http.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        error_msg = str(e)
+        # Provide more helpful error messages
+        if "connection" in error_msg.lower() or "refused" in error_msg.lower():
+            temporal_url = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
+            error_msg = f"Cannot connect to Temporal server at {temporal_url}. Make sure Temporal is running (e.g., via docker-compose up). Original error: {error_msg}"
+        raise HTTPException(http.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg)
 
 
 @router.get("/{workflow_id}/status")
