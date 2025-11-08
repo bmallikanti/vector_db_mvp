@@ -8,7 +8,6 @@ import sys
 from uuid import uuid4
 from app.temporal_workflows.client import TemporalQueryClient
 from app.temporal_workflows.query_workflow import QueryRequest
-from app.core.config import settings
 
 
 async def test_system():
@@ -17,10 +16,7 @@ async def test_system():
     print("=" * 70)
     print()
     
-    print("Configuration:")
-    print(f"  USE_REDIS: {settings.USE_REDIS}")
-    print(f"  REDIS_URL: {settings.REDIS_URL}")
-    print()
+    # Configuration output kept minimal; storage is in-memory for demos
     
     lib_id = str(uuid4())
     print(f"Testing with library ID: {lib_id}")
@@ -54,7 +50,6 @@ async def test_system():
         print("=" * 70)
         print()
         print("System is working correctly!")
-        print(f"Storage: {'Redis' if settings.USE_REDIS else 'In-Memory'}")
         print()
         
     except Exception as e:

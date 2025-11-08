@@ -90,7 +90,7 @@ async def setup_test_data_activity(lib_id: str) -> Dict[str, Any]:
         # Store with the provided lib_id as key for lookup
         lib_id = str(lib.id)  # Use the generated UUID
     
-    # Create library using service (respects USE_REDIS setting)
+    # Create library using service (in-memory demo)
     lib = libs.create(lib)
     
     doc = docs.add(str(lib.id), Document(title="Test Doc"))

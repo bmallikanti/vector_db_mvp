@@ -6,13 +6,6 @@ from app.models.library import Library
 from app.repositories.memory.library_repo import LibraryRepo
 from app.repositories.memory.document_repo import DocumentRepo
 from app.repositories.memory.chunk_repo import ChunkRepo
-from app.core.config import settings
-
-# Import Redis repos if enabled
-if settings.USE_REDIS:
-    from app.repositories.redis.library_repo import LibraryRepoRedis
-    from app.repositories.redis.document_repo import DocumentRepoRedis
-    from app.repositories.redis.chunk_repo import ChunkRepoRedis
 
 from app.indexing.base import Row
 from app.indexing.brute_force import BruteForceIndex
@@ -33,15 +26,9 @@ class SearchService:
         chunks: Optional[ChunkRepo] = None,
         embedder: Optional[CohereProvider] = None,
     ) -> None:
-        if settings.USE_REDIS:
-            lib_repo = libs or LibraryRepoRedis.instance(settings.REDIS_URL)
-            self.libs = lib_repo
-            self.docs = docs or DocumentRepoRedis.instance(lib_repo)
-            self.chunks = chunks or ChunkRepoRedis.instance(lib_repo)
-        else:
-            self.libs = libs or LibraryRepo.instance()
-            self.docs = docs or DocumentRepo.instance()
-            self.chunks = chunks or ChunkRepo.instance()
+        self.libs = libs or LibraryRepo.instance()
+        self.docs = docs or DocumentRepo.instance()
+        self.chunks = chunks or ChunkRepo.instance()
         self.embedder = embedder or CohereProvider()
 
     def _collect_rows(self, lib_id: str, dim_hint: Optional[int] = None) -> List[Row]:

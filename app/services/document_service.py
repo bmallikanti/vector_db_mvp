@@ -3,24 +3,13 @@ from typing import Optional, List
 from app.models.document import Document
 from app.repositories.memory.library_repo import LibraryRepo
 from app.repositories.memory.document_repo import DocumentRepo
-from app.core.config import settings
-
-# Import Redis repos if enabled
-if settings.USE_REDIS:
-    from app.repositories.redis.library_repo import LibraryRepoRedis
-    from app.repositories.redis.document_repo import DocumentRepoRedis
 
 class DocumentService:
     def __init__(self,
                  libs: LibraryRepo | None = None,
                  docs: DocumentRepo | None = None) -> None:
-        if settings.USE_REDIS:
-            lib_repo = libs or LibraryRepoRedis.instance(settings.REDIS_URL)
-            self.libs = lib_repo
-            self.docs = docs or DocumentRepoRedis.instance(lib_repo)
-        else:
-            self.libs = libs or LibraryRepo.instance()
-            self.docs = docs or DocumentRepo.instance()
+        self.libs = libs or LibraryRepo.instance()
+        self.docs = docs or DocumentRepo.instance()
 
     def list_by_library(self, lib_id: str) -> Optional[List[Document]]:
         return self.docs.list_by_library(lib_id)

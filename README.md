@@ -1,6 +1,6 @@
 # Vector Database with Temporal
 
-A minimal vector database with FastAPI, Temporal workflows, and Redis persistence.
+A minimal vector database with FastAPI and Temporal workflows.
 
 ## Quick Start
 
@@ -18,15 +18,13 @@ pip install -e .
 **Create `.env` file** (each user creates their own):
 ```bash
 COHERE_API_KEY=your_api_key_here
-USE_REDIS=true
-REDIS_URL=redis://localhost:6379/0
 ```
 
 > **Note:** `.env` and `venv/` are gitignored - each user must create their own.
 
 ### 3. Start Services
 
-**Terminal 1: Start Temporal & Redis**
+**Terminal 1: Start Temporal**
 ```bash
 docker-compose up -d
 ```
@@ -93,38 +91,33 @@ python test_system.py
                     │
                     ├─────────────────┬───────────────────┐
                     ▼                 ▼                   ▼
-        ┌──────────────────┐ ┌──────────────┐ ┌──────────────────┐
-        │  In-Memory       │ │   Redis      │ │   Temporal       │
-        │  (default)       │ │  (optional)  │ │  (workflows)     │
-        │                  │ │              │ │                  │
-        │ LibraryRepo      │ │ LibraryRepo  │ │ QueryWorkflow    │
-        │ DocumentRepo     │ │ Redis        │ │   ↓              │
-        │ ChunkRepo        │ │ DocumentRepo │ │ Activities       │
-        └──────────────────┘ │ Redis        │ │   ↓              │
-                             │ ChunkRepo    │ │ Services         │
-                             │ Redis        │ │   ↓              │
-                             └──────────────┘ │ Redis/In-Memory │
-                                               └──────────────────┘
+        ┌──────────────────┐           ┌──────────────────┐
+        │  In-Memory       │           │   Temporal       │
+        │  (default)       │           │  (workflows)     │
+        │                  │           │                  │
+        │ LibraryRepo      │           │ QueryWorkflow    │
+        │ DocumentRepo     │           │   ↓              │
+        │ ChunkRepo        │           │ Activities       │
+        └──────────────────┘           │   ↓              │
+                                       │ Services         │
+                                       │   ↓              │
+                                       │ In-Memory Repos  │
+                                       └──────────────────┘
 ```
 
-### Storage Modes
+### Storage Mode
 
-**In-Memory (USE_REDIS=false):**
+**In-Memory:**
 - Fast, no persistence
 - Data lost on restart
-- Good for testing
-
-**Redis (USE_REDIS=true):**
-- Persistent storage
-- Data survives restarts
-- Production-ready
+- Good for testing and demos
 
 ### Temporal Workflows
 
 When `use_temporal=true` in API or using Temporal client:
 - Workflow orchestrates: setup → validate → embed → search → rerank
 - Activities run in worker process
-- Uses Redis/In-Memory based on `USE_REDIS` setting
+- Uses in-memory repositories inside activities and services
 
 ## Key Components
 
@@ -135,8 +128,7 @@ When `use_temporal=true` in API or using Temporal client:
 - `SearchService` - Vector search (brute force or LSH)
 
 ### Repositories (`app/repositories/`)
-- `memory/` - In-memory storage (default)
-- `redis/` - Redis storage (when `USE_REDIS=true`)
+- `memory/` - In-memory storage
 
 ### Temporal (`app/temporal_workflows/`)
 - `worker.py` - Worker process (runs activities)
@@ -145,16 +137,7 @@ When `use_temporal=true` in API or using Temporal client:
 
 ## Utilities
 
-```bash
-# Enable Redis
-python enable_redis.py
-
-# Wipe Redis data (interactive)
-python wipe_redis.py
-
-# Quick wipe Redis (no confirmation)
-python quick_wipe_redis.py
-```
+No additional utilities are required for storage.
 
 ## API Endpoints
 
@@ -171,8 +154,6 @@ View workflow executions: http://localhost:8088
 ## Environment Variables
 
 - `COHERE_API_KEY` - Cohere API key for embeddings
-- `USE_REDIS` - `true` to use Redis, `false` for in-memory
-- `REDIS_URL` - Redis connection string
 
 ## Project Structure
 
@@ -181,7 +162,7 @@ app/
 ├── api/              # FastAPI routes
 ├── core/             # Configuration
 ├── models/           # Pydantic models
-├── repositories/     # Data storage (memory/redis)
+├── repositories/     # Data storage (memory)
 ├── services/         # Business logic
 ├── indexing/         # Vector indexes (brute/lsh)
 ├── temporal_workflows/ # Temporal workflows & activities

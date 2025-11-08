@@ -5,18 +5,10 @@ from copy import deepcopy
 
 from app.models.library import Library
 from app.repositories.memory.library_repo import LibraryRepo
-from app.core.config import settings
-
-# Import Redis repo if enabled
-if settings.USE_REDIS:
-    from app.repositories.redis.library_repo import LibraryRepoRedis
 
 class LibraryService:
     def __init__(self, libs: LibraryRepo | None = None) -> None:
-        if settings.USE_REDIS:
-            self.libs = libs or LibraryRepoRedis.instance(settings.REDIS_URL)
-        else:
-            self.libs = libs or LibraryRepo.instance()
+        self.libs = libs or LibraryRepo.instance()
 
     def create(self, lib: Library) -> Library:
         return self.libs.create(lib)
