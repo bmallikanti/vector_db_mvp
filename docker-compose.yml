@@ -1,0 +1,56 @@
+services:
+  # Temporal server
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - "7233:7233"  # gRPC endpoint
+      - "8080:8080"  # Web UI
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+    depends_on:
+      - postgresql
+
+  # PostgreSQL for Temporal
+  postgresql:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    ports:
+      - "5432:5432"
+    volumes:
+      - temporal-postgres-data:/var/lib/postgresql/data
+
+  # Temporal Web UI
+  temporal-web:
+    image: temporalio/web:latest
+    ports:
+      - "8088:8088"
+    environment:
+      - TEMPORAL_GRPC_ENDPOINT=temporal:7233
+      - TEMPORAL_PERMIT_WRITE_API=true
+    depends_on:
+      - temporal
+
+  # Redis for persistent vector DB storage
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  temporal-postgres-data:
+  redis-data:
+
