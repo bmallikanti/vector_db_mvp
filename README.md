@@ -2,6 +2,24 @@
 
 A minimal vector database with FastAPI and Temporal workflows.
 
+## TL;DR — Docker Spin‑Up
+
+```bash
+# 1) Provide your Cohere API key (optional if you pass embeddings yourself)
+echo "COHERE_API_KEY=your_api_key_here" > .env
+
+# 2) Start the whole stack (API + Worker + Temporal + UI + Postgres)
+docker compose up -d --build
+
+# (Optional) Start only Temporal infra first, then app services
+docker compose up -d postgres temporal ui
+docker compose up -d api worker
+```
+
+- API: http://localhost:8000
+- Temporal UI: http://localhost:8080
+
+
 ## Local Development (Step-by-Step)
 
 ### Prerequisites
@@ -45,7 +63,7 @@ TEMPORAL_ADDRESS=localhost:7233
 - The `.env` file is automatically loaded by `pydantic-settings` - no need to manually export variables
 - If you don't have a Cohere API key, you can still use the system by providing embeddings explicitly in API requests
 
-### Step 3: Start Temporal Server
+### Step 3: Start Temporal Server (skip if you used the Docker Spin‑Up above)
 
 The Temporal server needs to be running for workflows to work. Start it using Docker Compose:
 
@@ -288,6 +306,21 @@ Services:
 - API: http://localhost:8000
 - Temporal UI: http://localhost:8080
 - Temporal Server: temporal:7233 (internal)
+
+Alternate starts (optional):
+
+- Infra only (Postgres + Temporal + UI):
+  ```bash
+  docker compose up -d postgres temporal ui
+  ```
+- App services only (when infra already running):
+  ```bash
+  docker compose up -d api worker
+  ```
+- Rebuild app images after code changes:
+  ```bash
+  docker compose build api worker && docker compose up -d api worker
+  ```
 
 ### 3) Smoke test (CRUD + search)
 
