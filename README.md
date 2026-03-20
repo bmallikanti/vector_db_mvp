@@ -1,564 +1,229 @@
-# Vector Database with Temporal
+# Vector DB MVP
 
-A minimal vector database with FastAPI and Temporal workflows.
+A lightweight vector database prototype built with FastAPI and Temporal.
 
-## TL;DR — Docker Spin‑Up
+This project lets you create libraries, documents, and chunks, attach embeddings to text, and run semantic search using either direct API execution or Temporal-backed durable workflows. It is designed as an MVP that demonstrates backend system design, workflow orchestration, and vector retrieval concepts without hiding the implementation behind a managed database.
 
-```bash
-# 1) Provide your Cohere API key (optional if you pass embeddings yourself)
-echo "COHERE_API_KEY=your_api_key_here" > .env
+## What This Project Does
 
-# 2) Start the whole stack (API + Worker + Temporal + UI + Postgres)
-docker compose up -d --build
+- Stores content in a simple library -> document -> chunk hierarchy
+- Supports CRUD APIs for libraries, documents, and chunks
+- Runs semantic search over chunk embeddings
+- Offers two search modes:
+  - direct in-process execution
+  - durable Temporal workflow execution
+- Supports brute-force search and an LSH-based approximate search path
+- Includes an interactive CLI for driving workflow-based sessions
 
-# (Optional) Start only Temporal infra first, then app services
-docker compose up -d postgres temporal ui
-docker compose up -d api worker
+## Why It Is Interesting
+
+This is not just a CRUD app. It shows how to combine:
+
+- FastAPI for API design
+- in-memory repositories for a clean MVP data layer
+- vector search over embeddings
+- Temporal for durable orchestration of query flows
+- automated tests for core API behavior
+
+For a recruiter or reviewer, the value is in the system design:
+
+- clear separation between routers, services, repositories, indexing, and workflows
+- both synchronous and workflow-driven execution paths
+- a practical example of search infrastructure without depending on a third-party vector database
+
+## Tech Stack
+
+- Python 3.11+
+- FastAPI
+- Pydantic
+- NumPy
+- Temporal
+- Docker Compose
+- Pytest
+- Optional Cohere embeddings
+
+## Architecture
+
+```text
+Client / CLI
+    |
+ FastAPI routers
+    |
+ Services
+    |
+ In-memory repositories
+    |
+ Vector indexes (brute force / LSH)
+
+Optional search path:
+FastAPI -> Temporal client -> Temporal workflow -> activities -> services
 ```
 
-- API: http://localhost:8000
-- Temporal UI: http://localhost:8080
+## Repository Structure
 
+```text
+app/
+  api/                 FastAPI routers
+  services/            business logic
+  repositories/        in-memory data access
+  indexing/            brute-force and LSH search
+  temporal_workflows/  Temporal client, worker, workflows
+  models/              domain models
+tests/
+  test_crud.py         API CRUD coverage
+interactive_cli.py     workflow-driven CLI demo
+demo.py                example/demo entry point
+```
 
-## Local Development (Step-by-Step)
+## Key Features
 
-### Prerequisites
+### 1. Content Model
 
-- Python 3.11 or higher
-- Docker and Docker Compose (for Temporal server)
-- Cohere API key (optional, for auto-embeddings)
+- Libraries contain documents
+- Documents contain chunks
+- Chunks may include embeddings and metadata
 
-### Step 1: Install Dependencies
+### 2. Search
+
+The API supports semantic search against chunk embeddings. You can:
+
+- submit a `query_embedding` directly
+- submit `query_text` and let the embedding provider generate the vector
+- filter results by chunk metadata
+- choose `brute` or `lsh` indexing
+
+### 3. Durable Execution With Temporal
+
+Search requests can run through Temporal when you want workflow-based execution instead of direct in-process handling. This makes the project useful as a demonstration of orchestration patterns, not just retrieval.
+
+### 4. Interactive Workflow Demo
+
+The CLI starts a Temporal session and lets you create data and run searches interactively, which makes the project easier to demo live.
+
+## Quick Start
+
+### Option 1: Docker Compose
+
+1. Create a `.env` file:
 
 ```bash
-# Create virtual environment (if not already created)
+echo "COHERE_API_KEY=your_api_key_here" > .env
+```
+
+2. Start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+3. Open:
+
+- API: `http://localhost:8000`
+- Swagger docs: `http://localhost:8000/docs`
+- Temporal UI: `http://localhost:8080`
+
+### Option 2: Local Development
+
+1. Install dependencies:
+
+```bash
 python -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
 source venv/bin/activate
-# On Windows:
-# venv\Scripts\activate
-
-# Install the package
 pip install -e .
 ```
 
-### Step 2: Set Up Environment Variables
-
-Create a `.env` file in the project root:
+2. Create `.env`:
 
 ```bash
 echo "COHERE_API_KEY=your_api_key_here" > .env
 echo "TEMPORAL_ADDRESS=localhost:7233" >> .env
 ```
 
-Or manually create `.env`:
-```
-COHERE_API_KEY=your_api_key_here
-TEMPORAL_ADDRESS=localhost:7233
-```
-
-**Note:** 
-- The `.env` file is automatically loaded by `pydantic-settings` - no need to manually export variables
-- If you don't have a Cohere API key, you can still use the system by providing embeddings explicitly in API requests
-
-### Step 3: Start Temporal Server (skip if you used the Docker Spin‑Up above)
-
-The Temporal server needs to be running for workflows to work. Start it using Docker Compose:
+3. Start Temporal infrastructure:
 
 ```bash
-# Start only Temporal services (PostgreSQL, Temporal server, and UI)
 docker compose up -d postgres temporal ui
 ```
 
-This starts:
-- **PostgreSQL** (port 5432) - Temporal's database
-- **Temporal Server** (port 7233) - Workflow orchestration
-- **Temporal UI** (port 8080) - Web UI for monitoring workflows
-
-Verify Temporal is running:
-```bash
-# Check services are up
-docker compose ps
-
-# Or check Temporal UI in browser
-open http://localhost:8080
-```
-
-### Step 4: Start the Worker (Terminal 1)
-
-The worker processes Temporal workflows and activities. **Keep this running** in a separate terminal:
+4. Start the worker:
 
 ```bash
-# Make sure virtual environment is activated
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
-
-# Run the worker
 python -m app.temporal_workflows.worker
 ```
 
-You should see:
-```
-INFO - Connecting to Temporal server at localhost:7233...
-INFO - ✓ Connected to Temporal server
-INFO - Starting worker on task queue: vector-db-query-queue
-INFO - Worker is ready to process workflows and activities...
-INFO - Waiting for tasks...
-```
-
-**Important:** Keep this terminal open. The worker must be running for Temporal workflows to execute.
-
-### Step 5: Start the API Server (Terminal 2)
-
-In a **new terminal**, start the FastAPI server:
+5. Start the API:
 
 ```bash
-# Navigate to project directory
-cd /path/to/DB_vector
-
-# Activate virtual environment
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
-
-# Start the API server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-You should see:
-```
-INFO:     Uvicorn running on http://0.0.0.0:8000
-INFO:     Application startup complete.
-```
+## API Overview
 
-The API is now available at:
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Alternative Docs**: http://localhost:8000/redoc
+Base path: `/vector_db/libraries`
 
-**Note:** The `--reload` flag enables auto-reload on code changes (useful for development).
+Main endpoints:
 
-### Step 6: Test the Setup
+- `POST /vector_db/libraries`
+- `GET /vector_db/libraries`
+- `GET /vector_db/libraries/{id}`
+- `PUT /vector_db/libraries/{id}`
+- `DELETE /vector_db/libraries/{id}`
+- `POST /vector_db/libraries/{id}/documents`
+- `POST /vector_db/libraries/{id}/documents/{doc_id}/chunks`
+- `POST /vector_db/libraries/{id}/search`
 
-In a **third terminal** (or use your browser), test the API:
+Interactive workflow endpoints live under `/interactive`.
+
+## Example Usage
+
+Create a library:
 
 ```bash
-# Health check (if you have a health endpoint)
-curl http://localhost:8000/docs
-
-# Create a library
 curl -X POST http://localhost:8000/vector_db/libraries \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Test Library"}'
+  -H "Content-Type: application/json" \
+  -d '{"name":"Demo Library"}'
 ```
 
-### Step 7: Run Interactive CLI (Optional)
-
-For the interactive CLI experience, you can run it in another terminal:
+Search with a provided embedding:
 
 ```bash
-# Activate virtual environment
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
+curl -X POST http://localhost:8000/vector_db/libraries/{LIB_ID}/search \
+  -H "Content-Type: application/json" \
+  -d '{"query_embedding":[1.0,0.0],"k":3,"index":"brute"}'
+```
 
-# Run interactive CLI
+Search through Temporal:
+
+```bash
+curl -X POST "http://localhost:8000/vector_db/libraries/{LIB_ID}/search?use_temporal=true" \
+  -H "Content-Type: application/json" \
+  -d '{"query_text":"museum in paris","k":3,"index":"brute"}'
+```
+
+Run the interactive CLI:
+
+```bash
 python interactive_cli.py
 ```
 
-The CLI will:
-- Start a Temporal interactive workflow session
-- Guide you through adding libraries, documents, and chunks
-- Allow you to perform searches with auto-embeddings
-
-### Summary: Running All Components
-
-You need **3 terminals** running simultaneously:
-
-1. **Terminal 1 - Worker**: `python -m app.temporal_workflows.worker`
-2. **Terminal 2 - API**: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
-3. **Terminal 3 - CLI** (optional): `python interactive_cli.py`
-
-Plus Docker Compose running Temporal services in the background.
-
-### Troubleshooting
-
-**Worker can't connect to Temporal:**
-- Make sure Temporal server is running: `docker compose ps`
-- Check `TEMPORAL_ADDRESS` in `.env` matches your setup
-- Default should be `localhost:7233` for local development
-
-**API can't reach Temporal:**
-- Verify Temporal server is accessible at the address in `TEMPORAL_ADDRESS`
-- Check firewall/network settings
-
-**Workflows not executing:**
-- Ensure the worker is running and connected
-- Check Temporal UI (http://localhost:8080) for workflow status
-- Look for errors in worker terminal output
-
 ## Testing
 
-### Running CRUD Tests
+Run the CRUD test suite:
 
-The project includes comprehensive CRUD tests that are **independent of Temporal workflows**. These tests verify all create, read, update, and delete operations for libraries, documents, and chunks.
-
-**Important:** You do **NOT** need to run `main.py` (the API server) for these tests. The tests use FastAPI's `TestClient`, which tests the application directly without requiring a running server.
-
-### Prerequisites for Testing
-
-1. Install dependencies (including pytest):
-   ```bash
-   pip install -e .
-   ```
-
-2. Ensure your virtual environment is activated:
-   ```bash
-   source venv/bin/activate  # macOS/Linux
-   # venv\Scripts\activate   # Windows
-   ```
-
-### Running Tests
-
-Run all CRUD tests:
 ```bash
 pytest tests/test_crud.py -v
 ```
 
-Run all tests in the tests directory:
-```bash
-pytest tests/ -v
-```
+These tests cover the core API lifecycle for libraries, documents, and chunks without needing the FastAPI server to be started separately.
 
-Run a specific test:
-```bash
-pytest tests/test_crud.py::TestLibrariesCRUD::test_create_library_minimal -v
-```
+## Current Limitations
 
-Run tests with coverage:
-```bash
-pytest tests/ --cov=app --cov-report=html
-```
+- storage is in memory only, so data does not persist across restarts
+- the project is an MVP, not a production-ready vector database
+- tests currently focus on CRUD behavior more than Temporal workflow coverage
 
-### What the Tests Cover
+## Resume-Friendly Summary
 
-The CRUD test suite (`tests/test_crud.py`) includes **39 tests** covering:
+If you want a one-line description for a portfolio, resume, or recruiter screen:
 
-- **Libraries** (10 tests):
-  - Create (minimal & full data)
-  - List all libraries
-  - Get specific library
-  - Update library
-  - Delete library
-  - Error cases (404, 400)
-
-- **Documents** (13 tests):
-  - Create documents
-  - List documents in a library
-  - Get specific document
-  - Update document (title & metadata)
-  - Delete document
-  - Error cases (library/document not found, validation errors)
-
-- **Chunks** (15 tests):
-  - Create chunks (with/without embeddings)
-  - List chunks in a document
-  - Update chunk (text, embedding, metadata)
-  - Delete chunk
-  - Error cases (library/document not found, validation errors)
-
-- **Integration** (1 test):
-  - Full workflow: create library → document → chunks → update → delete
-
-### Test Isolation
-
-Each test is isolated using pytest fixtures:
-- Tests automatically create and clean up test data
-- No shared state between tests
-- No need to manually clean up after tests
-
-### Note on Temporal Tests
-
-The current test suite focuses on CRUD operations and does **not** require:
-- Temporal server to be running
-- Worker process to be running
-- API server (`main.py`) to be running
-
-For testing Temporal workflows, you would need Temporal infrastructure running, but the CRUD tests are designed to be independent and fast.
-
-## Quick Start (Docker)
-
-### 1) Set environment
-
-Create a `.env` with your Cohere key:
-```bash
-echo "COHERE_API_KEY=your_api_key_here" > .env
-```
-Note: No API keys are baked into the Docker images. Set your own `COHERE_API_KEY` via environment if you want activities/CLI to auto-embed with Cohere. If you prefer not to use Cohere, provide embeddings explicitly in chunk requests and search requests.
-
-### 2) Start everything with Docker Compose
-
-```bash
-docker compose up -d --build
-```
-
-Services:
-- API: http://localhost:8000
-- Temporal UI: http://localhost:8080
-- Temporal Server: temporal:7233 (internal)
-
-Alternate starts (optional):
-
-- Infra only (Postgres + Temporal + UI):
-  ```bash
-  docker compose up -d postgres temporal ui
-  ```
-- App services only (when infra already running):
-  ```bash
-  docker compose up -d api worker
-  ```
-- Rebuild app images after code changes:
-  ```bash
-  docker compose build api worker && docker compose up -d api worker
-  ```
-
-### 3) Smoke test (CRUD + search)
-
-```bash
-# Create library
-LIB=$(curl -s -X POST http://localhost:8000/vector_db/libraries \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"My Library"}' | jq -r '.id')
-echo "LIB=$LIB"
-
-# Create document
-DOC=$(curl -s -X POST http://localhost:8000/vector_db/libraries/$LIB/documents \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Paris Guide","metadata":{"category":"travel"}}' | jq -r '.id')
-echo "DOC=$DOC"
-
-# Add chunk (provide your own embedding if you prefer)
-curl -s -X POST http://localhost:8000/vector_db/libraries/$LIB/documents/$DOC/chunks \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"The Louvre is in Paris.","embedding":[0.9,0.1]}' | jq .
-
-# Direct search (non-Temporal)
-curl -s -X POST "http://localhost:8000/vector_db/libraries/$LIB/search" \
-  -H 'Content-Type: application/json' \
-  -d '{"query_embedding":[1.0,0.0],"k":3,"index":"brute"}' | jq .
-```
-
-### 4) Temporal-backed search (durable)
-
-```bash
-# Using the API with durable execution
-curl -s -X POST "http://localhost:8000/vector_db/libraries/$LIB/search?use_temporal=true" \
-  -H 'Content-Type: application/json' \
-  -d '{"query_text":"Paris museum","k":3,"index":"brute"}' | jq .
-```
-
-### 5) Interactive session (CLI)
-
-```bash
-python interactive_cli.py
-```
-- The CLI will:
-  - Start a Temporal interactive workflow session
-  - Let you add libraries, documents, chunks (Cohere embeddings auto-generated)
-  - Show available libraries (by name) and documents (by title) for selection
-  - Configure k/index/filters and start queries
-    - Filters apply to chunk metadata (e.g., type). The CLI can show available keys/values per library.
-    - Enter filters either as key=value, comma-separated (e.g., `type=text,lang=en`) or JSON (e.g., `{ "type":"text" }`).
-  - Wait for and display results immediately, reranked and trimmed to k
-    - Shows both requested `index` and actual `index_used` (may fall back to brute on tiny datasets)
-  - Show results and status any time
-  - Pause ~3 seconds after each action
-  - Provide shortcuts to list libraries/documents
-  - Edit resources via REST PUT:
-    - Edit library (name/description/tags)
-    - Edit document (title/category)
-    - Edit chunk (text/type)
-  - Print the exact curl used for each action
-  - Finish session (no separate cancel in CLI)
-
-## Architecture
-
-### What Uses What
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    API Layer                             │
-│  FastAPI (app/main.py)                                  │
-│    ↓                                                     │
-│  Routers (app/api/routers/*)                           │
-│    ↓                                                     │
-│  Services (app/services/*)                              │
-└─────────────────────────────────────────────────────────┘
-                    │
-                    ├─────────────────┬───────────────────┐
-                    ▼                 ▼                   ▼
-        ┌──────────────────┐           ┌──────────────────┐
-        │  In-Memory       │           │   Temporal       │
-        │  (default)       │           │  (workflows)     │
-        │                  │           │                  │
-        │ LibraryRepo      │           │ QueryWorkflow    │
-        │ DocumentRepo     │           │   ↓              │
-        │ ChunkRepo        │           │ Activities       │
-        └──────────────────┘           │   ↓              │
-                                       │ Services         │
-                                       │   ↓              │
-                                       │ In-Memory Repos  │
-                                       └──────────────────┘
-```
-
-### Storage Mode
-
-**In-Memory:**
-- Fast, no persistence
-- Data lost on restart
-- Good for testing and demos
-
-### Temporal Workflows
-
-Two flows:
-- QueryWorkflow (request/response): orchestrates validate → embed → search → rerank for one request
-- InteractiveDBWorkflow (signal-driven): long-running session that:
-  - Receives signals to add libraries, documents, chunks (all embedding via Cohere)
-  - Accepts query parameters and query requests
-  - Exposes queries to fetch live status and partial results
-  - Pauses ~3 seconds after each action for user-driven control
-
-## Key Components
-
-### Services (`app/services/`)
-- `LibraryService` - Manages libraries
-- `DocumentService` - Manages documents
-- `ChunkService` - Manages chunks
-- `SearchService` - Vector search (brute force or LSH)
-
-### Repositories (`app/repositories/`)
-- `memory/` - In-memory storage
-
-### Temporal (`app/temporal_workflows/`)
-- `worker.py` - Worker process (runs activities)
-- `client.py` - Client to start workflows
-- `query_workflow.py` - Query workflow and activities
-- `interactive_workflow.py` - Interactive workflow and activities
-
-## API Endpoints
-
-- `POST /vector_db/libraries` - Create library
-- `GET /vector_db/libraries` - List libraries
-- `GET /vector_db/libraries/{id}` - Get library
-- `PUT /vector_db/libraries/{id}` - Update library
-- `DELETE /vector_db/libraries/{id}` - Delete library
-- `POST /vector_db/libraries/{id}/documents` - Add document
-- `GET /vector_db/libraries/{id}/documents` - List documents
-- `GET /vector_db/libraries/{id}/documents/{doc_id}` - Get document
-- `PUT /vector_db/libraries/{id}/documents/{doc_id}` - Update document
-- `DELETE /vector_db/libraries/{id}/documents/{doc_id}` - Delete document
-- `POST /vector_db/libraries/{id}/documents/{doc_id}/chunks` - Add chunk
-- `GET /vector_db/libraries/{id}/documents/{doc_id}/chunks` - List chunks
-- `PUT /vector_db/libraries/{id}/documents/{doc_id}/chunks/{chunk_id}` - Update chunk
-- `DELETE /vector_db/libraries/{id}/documents/{doc_id}/chunks/{chunk_id}` - Delete chunk
-- `POST /vector_db/libraries/{id}/search?use_temporal=true` - Search (durable when query param set)
-
-Interactive workflow control:
-- `POST /interactive/start` → { workflow_id }
-- `GET /interactive/{workflow_id}/status`
-- `GET /interactive/{workflow_id}/results`
-- `POST /interactive/{workflow_id}/signal/add_library`
-- `POST /interactive/{workflow_id}/signal/add_document`
-- `POST /interactive/{workflow_id}/signal/add_chunk`
-- `POST /interactive/{workflow_id}/signal/set_query_params`
-- `POST /interactive/{workflow_id}/signal/start_query`
-- `POST /interactive/{workflow_id}/signal/finish`
-- `POST /interactive/{workflow_id}/signal/cancel` (optional; CLI uses finish)
-
-## Interactive Workflow API (Examples)
-
-Below are minimal curl examples for the interactive session.
-
-- Start a session
-  - `POST /interactive/start`
-  - Response: `{ "workflow_id": "interactive-session-...", "run_id": "..." }`
-
-- Add a library
-  - `POST /interactive/{workflow_id}/signal/add_library`
-  - Body: `{ "name": "My Library", "description": "optional" }`
-
-- Check status (to find IDs/names)
-  - `GET /interactive/{workflow_id}/status`
-  - Useful fields:
-    - `created_library_ids`, `created_libraries_by_id`
-    - `created_document_ids_by_library`, `created_document_titles_by_library`
-    - `chunk_metadata_catalog_by_library` (suggested filter keys/values)
-    - `query_params`, `timeline_tail`
-
-- Add a document to a library
-  - `POST /interactive/{workflow_id}/signal/add_document`
-  - Body: `{ "lib_id": "<LIB_ID>", "title": "Doc Title", "metadata": { "category": "optional" } }`
-
-- Add a chunk to a document
-  - `POST /interactive/{workflow_id}/signal/add_chunk`
-  - Body: `{ "lib_id": "<LIB_ID>", "doc_id": "<DOC_ID>", "text": "Chunk text", "metadata": { "type": "paragraph" } }`
-
-- Set query parameters
-  - `POST /interactive/{workflow_id}/signal/set_query_params`
-  - Body: `{ "k": 3, "index": "brute", "filters": { "type": "text" } }`
-  - Notes:
-    - `index`: `brute` or `lsh` (`lsh` may fall back to `brute` on tiny datasets)
-    - `filters`: exact match on chunk metadata keys (e.g., `type`)
-
-- Start a query
-  - `POST /interactive/{workflow_id}/signal/start_query`
-  - Body (text): `{ "lib_id": "<LIB_ID>", "query_text": "Paris museum" }`
-  - Or (embedding): `{ "lib_id": "<LIB_ID>", "query_embedding": [1.0, 0.0] }`
-
-- Get results
-  - `GET /interactive/{workflow_id}/results`
-  - Returns: `{ "hits": [...], "index": "requested", "index_used": "actual", "library_version": n, "reranked": true }`
-
-- Finish the session
-  - `POST /interactive/{workflow_id}/signal/finish`
-
-- (Optional) Cancel the session
-  - `POST /interactive/{workflow_id}/signal/cancel`
-
-## CRUD API (Examples)
-
-- Update library
-  - `PUT /vector_db/libraries/{lib_id}`
-  - Body: `{ "name": "New Name", "description": "optional", "metadata": { "tags": "tag1,tag2" } }`
-
-- Update document
-  - `PUT /vector_db/libraries/{lib_id}/documents/{doc_id}`
-  - Body: `{ "title": "New Title", "metadata": { "category": "guide" } }`
-
-- Update chunk
-  - `PUT /vector_db/libraries/{lib_id}/documents/{doc_id}/chunks/{chunk_id}`
-  - Body: `{ "text": "new text", "metadata": { "type": "paragraph" } }`
-  - Behavior: if `text` is changed and `embedding` omitted, server re-embeds via Cohere (when configured).
-
-## Temporal UI
-
-View workflow executions: http://localhost:8080 (New UI v2)
-
-## Environment Variables
-
-- `COHERE_API_KEY` - Cohere API key for embeddings
-- `TEMPORAL_ADDRESS` - Address of Temporal server (default inside Docker: `temporal:7233`)
-
-## Project Structure
-
-```
-app/
-├── api/              # FastAPI routes
-├── core/             # Configuration
-├── models/           # Pydantic models
-├── repositories/     # Data storage (memory)
-├── services/         # Business logic
-├── indexing/         # Vector indexes (brute/lsh)
-├── temporal_workflows/ # Temporal workflows & activities
-└── main.py           # FastAPI app
-```
+> Built a vector database MVP in Python using FastAPI and Temporal, supporting semantic search, workflow-based query orchestration, and a hierarchical content model for libraries, documents, and chunks.
