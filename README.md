@@ -222,8 +222,4 @@ These tests cover the core API lifecycle for libraries, documents, and chunks wi
 - the project is an MVP, not a production-ready vector database
 - tests currently focus on CRUD behavior more than Temporal workflow coverage
 
-## Resume-Friendly Summary
 
-If you want a one-line description for a portfolio, resume, or recruiter screen:
-
-> Built a vector database MVP in Python using FastAPI and Temporal, supporting semantic search, workflow-based query orchestration, and a hierarchical content model for libraries, documents, and chunks.
